@@ -4,19 +4,16 @@ import os
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-
 from chat_handler import ChatHandler
 from vector_store import VectorStore
 
 app = Flask(__name__)
 CORS(app)
 
-# Charger la clé OpenAI
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     raise ValueError("La clé OPENAI_API_KEY est manquante.")
 
-# Initialiser le vector store et Lucie
 vector_store = VectorStore(openai_api_key=openai_api_key)
 lucie = ChatHandler(openai_api_key=openai_api_key, vector_store=vector_store)
 
@@ -27,7 +24,7 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
         message = data.get("message", "").strip()
         if not message:
             return jsonify({"response": "Je n’ai pas compris votre message."}), 400
@@ -38,6 +35,5 @@ def chat():
         traceback.print_exc()
         return jsonify({"response": "Une erreur est survenue côté serveur."}), 500
 
-# ✅ LIGNE OBLIGATOIRE POUR LANCER EN LOCAL
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
