@@ -7,27 +7,12 @@ from vector_store import VectorStore
 logger = logging.getLogger(__name__)
 
 class ChatHandler:
-    """
-    Handle chat interactions using OpenAI and vector search for context
-    """
-
     def __init__(self, openai_api_key: str, vector_store: VectorStore):
-        """
-        Initialize chat handler
-
-        Args:
-            openai_api_key: OpenAI API key
-            vector_store: Initialized vector store for document search
-        """
         self.openai_client = OpenAI(api_key=openai_api_key)
         self.vector_store = vector_store
-
-        # the newest OpenAI model is "gpt-4o" which was released May 13, 2024.
-        # do not change this unless explicitly requested by the user
         self.model = "gpt-4o"
-        self.temperature = 0.3  # Optimized for precise and elegant responses
+        self.temperature = 0.3
 
-        # System prompt for Lucie, la conseillère Kimoky
         self.system_prompt = """
 Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.com), une boutique spécialisée dans les kimonos modernes, élégants et inspirés de l’esthétique japonaise. Tu accompagnes chaque visiteur avec douceur, précision et élégance.
 
@@ -59,27 +44,16 @@ Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.co
 Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
         """
 
-    def get_response(self, question: str) -> str:
-        """
-        Get a response to a user question using vector search and OpenAI
-
-        Args:
-            question: User's question
-
-        Returns:
-            Generated response
-        """
+    def get_response(self, question: str, is_mobile: bool = False) -> str:
         try:
-            # Search for relevant context
             context_docs = self.vector_store.search(question, top_k=5)
-
-            # Build context from search results
             context = self._build_context(context_docs)
 
-            # Create the prompt
+            if context.strip().startswith("Aucun document"):
+                return "Je n’ai pas trouvé cette information dans notre base. Vous pouvez consulter notre page FAQ ou nous écrire à boutique@kimoky.com 💌"
+
             user_prompt = self._create_user_prompt(question, context)
 
-            # Generate response using OpenAI
             response = self.openai_client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -87,7 +61,7 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=self.temperature,
-                max_tokens=800
+                max_tokens=400 if is_mobile else 800
             )
 
             answer = response.choices[0].message.content
@@ -100,15 +74,6 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
             return "Je suis désolée, une erreur s’est produite. N’hésitez pas à nous recontacter ou à consulter notre page d’aide."
 
     def _build_context(self, context_docs: List[Dict[str, Any]]) -> str:
-        """
-        Build context string from search results
-
-        Args:
-            context_docs: List of relevant documents from vector search
-
-        Returns:
-            Formatted context string
-        """
         if not context_docs:
             return "Aucun document de référence trouvé."
 
@@ -117,22 +82,11 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
             source = doc.get("source_file", "Document")
             text = doc.get("text", "")
             score = doc.get("similarity_score", 0)
-
             context_parts.append(f"[Document {i} - {source} (pertinence: {score:.2f})]:\n{text}\n")
 
         return "\n".join(context_parts)
 
     def _create_user_prompt(self, question: str, context: str) -> str:
-        """
-        Create the user prompt combining question and context
-
-        Args:
-            question: User's question
-            context: Relevant context from documents
-
-        Returns:
-            Formatted prompt
-        """
         return f"""QUESTION : {question}
 
 CONTEXTE :
@@ -141,17 +95,7 @@ CONTEXTE :
 Réponds de façon concise, chaleureuse et professionnelle, en t’appuyant sur le contexte si possible. Si le contexte est insuffisant, propose une réponse rassurante ou un lien vers le site Kimoky."""
 
     def _categorize_question(self, question: str) -> str:
-        """
-        Categorize the type of question to optimize search
-
-        Args:
-            question: User's question
-
-        Returns:
-            Question category
-        """
         question_lower = question.lower()
-
         if any(word in question_lower for word in ["livraison", "expédition", "délai", "transport"]):
             return "livraison"
         elif any(word in question_lower for word in ["retour", "échange", "remboursement", "cgv"]):
