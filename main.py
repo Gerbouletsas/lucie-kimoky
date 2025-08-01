@@ -26,14 +26,19 @@ def chat():
     try:
         data = request.get_json(force=True)
         message = data.get("message", "").strip()
+        is_mobile = data.get("mode") == "mobile"  # Détection du mode mobile (ex: {"mode": "mobile"})
+
         if not message:
             return jsonify({"response": "Je n’ai pas compris votre message."}), 400
-        response = lucie.get_response(message)
+
+        response = lucie.get_response(message, is_mobile=is_mobile)  # Passage du paramètre is_mobile
         return jsonify({"response": response})
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"response": "Une erreur est survenue côté serveur."}), 500
 
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
