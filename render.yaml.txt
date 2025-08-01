@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: lucie-kimoky
+    env: python
+    buildCommand: ""
+    startCommand: gunicorn main:app

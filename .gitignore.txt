@@ -1,0 +1,9 @@
+# Fichiers à ne pas pousser sur GitHub
+.env
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+.vscode/
+*.faiss
+*.pkl
