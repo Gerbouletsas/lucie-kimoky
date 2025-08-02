@@ -44,7 +44,7 @@ Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.co
 Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
         """
 
-        def get_response(self, question: str, is_mobile: bool = False) -> str:
+    def get_response(self, question: str, is_mobile: bool = False) -> str:
         try:
             context_docs = self.vector_store.search(question, top_k=5)
             context = self._build_context(context_docs)
@@ -76,7 +76,6 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
         except Exception as e:
             logger.error(f"Error generating response: {e}")
             return "Je suis désolée, une erreur s’est produite. N’hésitez pas à nous recontacter ou à consulter notre page d’aide."
-
 
     def _build_context(self, context_docs: List[Dict[str, Any]]) -> str:
         if not context_docs:
@@ -111,5 +110,3 @@ Réponds de façon concise, chaleureuse et professionnelle, en t’appuyant sur 
             return "produit"
         else:
             return "general"
-
-
