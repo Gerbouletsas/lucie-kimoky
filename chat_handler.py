@@ -64,8 +64,16 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
                 max_tokens=400 if is_mobile else 800
             )
 
-            answer = response.choices[0].message.content
-            logger.info(f"Generated response for question: {question[:50]}...")
+       answer = response.choices[0].message.content
+
+# Supprimer le préfixe [Kimoky] s'il apparaît au début
+if answer.strip().startswith("[Kimoky]"):
+    answer = answer.strip().replace("[Kimoky]", "", 1).lstrip()
+
+logger.info(f"Generated response for question: {question[:50]}...")
+return answer
+
+
 
             return answer
 
@@ -106,3 +114,4 @@ Réponds de façon concise, chaleureuse et professionnelle, en t’appuyant sur 
             return "produit"
         else:
             return "general"
+
