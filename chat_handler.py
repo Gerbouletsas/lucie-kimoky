@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict, Any
 from openai import OpenAI
 
@@ -66,9 +67,8 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
 
             answer = response.choices[0].message.content
 
-            # Supprimer le préfixe [Kimoky] s'il apparaît
-            if answer.strip().startswith("[Kimoky]"):
-                answer = answer.strip().replace("[Kimoky]", "", 1).lstrip()
+            # Nettoyage du préfixe [Kimoky] ou similaire au début
+            answer = re.sub(r"^\[[^\]]+\]\s*", "", answer.strip())
 
             logger.info(f"Generated response for question: {question[:50]}...")
             return answer
