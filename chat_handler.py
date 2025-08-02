@@ -62,7 +62,7 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=self.temperature,
-                max_tokens=400 if is_mobile else 800
+                max_tokens=300 if is_mobile else 500
             )
 
             answer = response.choices[0].message.content
@@ -96,7 +96,7 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
 CONTEXTE :
 {context}
 
-Réponds de façon concise, chaleureuse et professionnelle, en t’appuyant sur le contexte si possible. Si le contexte est insuffisant, propose une réponse rassurante ou un lien vers le site Kimoky."""
+Réponds en **2 à 4 phrases maximum**, avec un ton chaleureux, fluide et professionnel. Si le contexte est insuffisant, rassure ou redirige vers le site Kimoky."""
 
     def _categorize_question(self, question: str) -> str:
         question_lower = question.lower()
@@ -110,3 +110,4 @@ Réponds de façon concise, chaleureuse et professionnelle, en t’appuyant sur 
             return "produit"
         else:
             return "general"
+
