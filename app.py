@@ -1,16 +1,15 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response, Response
 import os, uuid
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask import make_response, Response
 from functools import wraps
 import openai
 
 app = Flask(__name__)
 
 # CORS (ajuste les domaines si besoin)
-CORS(app, resources={r"/chat": {"origins": ["https://kimoky.com","https://www.kimoky.com"]}})
+CORS(app, resources={r"/chat": {"origins": ["https://kimoky.com", "https://www.kimoky.com"]}})
 
 # DB (Postgres en prod, SQLite local)
 db_uri = os.getenv("DATABASE_URL", "sqlite:///kimoky_chat.db")
@@ -44,6 +43,7 @@ with app.app_context():
     db.create_all()
 
 IDLE_TIMEOUT = timedelta(minutes=30)
+
 
 def get_or_create_conversation(payload):
     sid = (payload.get("session_id") or request.cookies.get("lucie_sid") or uuid.uuid4().hex)[:64]
@@ -82,40 +82,23 @@ def chat():
         db.session.add(Message(conversation_id=conv.id, role="user", content=message))
         db.session.commit()
 
-        # 2) Ta logique de réponse (prompt intact)
+        # 2) Requête OpenAI avec prompt personnalisé
+        openai.api_key = os.getenv("OPENAI_API_KEY")
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+        completion = openai.ChatCompletion.create(
+            model="gpt-4-1106-preview",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Tu es le conseiller digital officiel de la marque Kimoky (https://kimoky.com)..."""
+                },
+                {"role": "user", "content": message}
+            ],
+            temperature=0.6,
+            max_tokens=1000,
+        )
 
-completion = openai.ChatCompletion.create(
-    model="gpt-4-1106-preview",
-    messages=[
-        {
-            "role": "system",
-            "content": """Tu es le conseiller digital officiel de la marque Kimoky (https://kimoky.com), une boutique spécialisée dans les kimonos modernes, élégants et inspirés de l’esthétique japonaise. Ton rôle est d'accompagner chaque visiteur ou cliente/client de manière fluide, professionnelle, chaleureuse et élégante.
-
-Ta mission est double :
-1. Apporter des conseils de style et d’usage : recommander le kimono idéal selon la morphologie, l’occasion, le style recherché (décontracté, nuit, chic, plage…), la saison ou la matière. Tu peux aussi orienter vers des articles de blog s’ils sont disponibles.
-2. Répondre avec précision et clarté à toutes les questions pratiques : tailles, livraison, suivi de colis, retours, échanges, contact, CGV, sécurité des paiements, politique de confidentialité, “qui sommes-nous”, délais d’expédition, etc.
-
-Ton ton est toujours :
-- fluide, professionnel, chaleureux et élégant
-- fidèle à l'univers Kimoky
-- orienté vers le conseil, la bienveillance et l'expérience client
-
-Tu ne dois jamais :
-- mentionner de prix
-- passer commande à la place du client
-
-Tu peux reformuler certaines questions de manière élégante, guider la personne dans son choix de kimono, rassurer si besoin, et toujours rester aligné avec l’univers Kimoky. Tu es à leur service, avec clarté et une profonde bienveillance. Ta mission est aussi de rassurer, de mettre en confiance et d’adopter une attitude compréhensive, même face à une réclamation. Chaque réponse doit transmettre du calme, de la fluidité et une attention sincère."""
-        },
-        {"role": "user", "content": message}
-    ],
-    temperature=0.6,
-    max_tokens=1000,
-)
-
-response = completion.choices[0].message.content.strip()
-
+        response = completion.choices[0].message.content.strip()
 
         # 3) Log réponse assistante
         db.session.add(Message(conversation_id=conv.id, role="assistant", content=response))
@@ -147,7 +130,6 @@ def require_auth(f):
         return f(*args, **kwargs)
     return wrapper
 
-# --- Export CSV de tous les messages ---
 @app.route("/admin/export.csv", methods=["GET"])
 @require_auth
 def export_csv():
@@ -169,5 +151,3 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
