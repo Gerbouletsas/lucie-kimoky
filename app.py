@@ -66,8 +66,8 @@ def get_or_create_conversation(payload):
 
 @app.route("/")
 def home():
-    return "Bienvenue sur l'Assistant Kimoky !"
-@@ -27,3 +89,4 @@ def chat():
+    return "Bienvenue sur l'Assistant Kimoky !" def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
