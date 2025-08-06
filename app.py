@@ -5,6 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask import make_response, Response
 from functools import wraps
+import openai
 
 app = Flask(__name__)
 
@@ -82,7 +83,6 @@ def chat():
         db.session.commit()
 
         # 2) Ta logique de réponse (prompt intact)
-import openai
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -169,4 +169,5 @@ def export_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
 
