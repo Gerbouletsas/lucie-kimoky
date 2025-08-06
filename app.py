@@ -1,6 +1,4 @@
 from flask import Flask, request, jsonify
-
-# 👇 Ajoute ces imports immédiatement après
 import os, uuid
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
@@ -19,6 +17,7 @@ if db_uri.startswith("postgres://"):
 app.config["SQLALCHEMY_DATABASE_URI"] = db_uri
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
+
 # --- Modèles ---
 class Conversation(db.Model):
     __tablename__ = "conversations"
@@ -42,7 +41,6 @@ class Message(db.Model):
 with app.app_context():
     db.create_all()
 
-from flask import make_response
 IDLE_TIMEOUT = timedelta(minutes=30)
 
 def get_or_create_conversation(payload):
@@ -56,7 +54,6 @@ def get_or_create_conversation(payload):
         conv = Conversation(session_id=sid, started_at=now)
         db.session.add(conv)
     conv.last_activity_at = now
-    # Métadonnées (facultatif selon ce que tu envoies du front)
     conv.page_url = payload.get("page_url") or conv.page_url
     conv.user_agent = request.headers.get("User-Agent")
     conv.locale = payload.get("locale") or conv.locale
@@ -66,10 +63,35 @@ def get_or_create_conversation(payload):
 
 @app.route("/")
 def home():
-    return "Bienvenue sur l'Assistant Kimoky !" 
-    def chat():
+    return "Bienvenue sur l'Assistant Kimoky !"
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    if request.content_type != 'application/json':
+        return jsonify({"response": "Contenu non supporté. Utilisez 'application/json'."}), 415
+    try:
+        data = request.get_json(force=True)
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"response": "Le message est vide."}), 400
+
+        conversation, session_id = get_or_create_conversation(data)
+
+        # Réponse simulée pour le test
+        response = f"Merci pour votre question : « {message} ». Notre conseillère vous répondra bientôt."
+
+        # Sauvegarder les messages
+        user_msg = Message(conversation_id=conversation.id, role="user", content=message)
+        assistant_msg = Message(conversation_id=conversation.id, role="assistant", content=response)
+        db.session.add_all([user_msg, assistant_msg])
+        db.session.commit()
+
+        resp = make_response(jsonify({"response": response}))
+        resp.set_cookie("lucie_sid", session_id, max_age=30*24*3600, httponly=True, secure=True)
+        return resp
+
+    except Exception as e:
+        return jsonify({"response": f"Erreur côté serveur : {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-
