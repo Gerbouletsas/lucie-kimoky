@@ -76,9 +76,10 @@ def chat():
             return jsonify({"response": "Le message est vide."}), 400
 
         conversation, session_id = get_or_create_conversation(data)
+        
+response = lucie.get_response(message, is_mobile=data.get("is_mobile", False))
 
-        # Réponse simulée pour le test
-        response = f"Merci pour votre question : « {message} ». Notre conseillère vous répondra bientôt."
+
 
         # Sauvegarder les messages
         user_msg = Message(conversation_id=conversation.id, role="user", content=message)
@@ -95,3 +96,4 @@ def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
