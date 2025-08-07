@@ -216,6 +216,18 @@ def admin_dashboard():
         <body>
             <div class="container">
                 <h1>🌸 Administration Lucie - Conversations</h1>
+
+<div style="margin: 20px 0; text-align: right;">
+    <a href="/admin/export/json" style="background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
+        📄 Export JSON
+    </a>
+    <a href="/admin/export/csv" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
+        📊 Export CSV
+    </a>
+    <a href="/admin/export/excel" style="background: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
+        📈 Export Excel
+    </a>
+</div>
                 
                 <div class="stats">
                     <div class="stat-box">
@@ -534,5 +546,6 @@ def export_excel():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
