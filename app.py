@@ -166,6 +166,195 @@ def health():
         "timestamp": datetime.utcnow().isoformat()
     })
 
+# Ajoutez ces routes à la fin de votre app.py (avant if __name__ == "__main__":)
+
+@app.route("/admin")
+def admin_dashboard():
+    """Interface d'administration pour consulter les conversations"""
+    try:
+        # Statistiques générales
+        total_conversations = Conversation.query.count()
+        total_messages = Message.query.count()
+        
+        # Conversations récentes (10 dernières)
+        recent_conversations = (Conversation.query
+                              .order_by(Conversation.last_activity_at.desc())
+                              .limit(10)
+                              .all())
+        
+        # Messages récents
+        recent_messages = (Message.query
+                         .join(Conversation)
+                         .order_by(Message.created_at.desc())
+                         .limit(20)
+                         .all())
+        
+        # Générer HTML
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Admin - Conversations Lucie</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }}
+                .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
+                h1 {{ color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }}
+                h2 {{ color: #666; margin-top: 30px; }}
+                .stats {{ display: flex; gap: 20px; margin: 20px 0; }}
+                .stat-box {{ background: #007bff; color: white; padding: 20px; border-radius: 8px; text-align: center; flex: 1; }}
+                .conversation {{ border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; background: #fafafa; }}
+                .message {{ margin: 10px 0; padding: 10px; border-radius: 5px; }}
+                .user {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
+                .assistant {{ background: #f1f8e9; border-left: 4px solid #4caf50; }}
+                .timestamp {{ color: #666; font-size: 12px; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
+                th {{ background: #f8f9fa; }}
+                .truncate {{ max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🌸 Administration Lucie - Conversations</h1>
+                
+                <div class="stats">
+                    <div class="stat-box">
+                        <h3>{total_conversations}</h3>
+                        <p>Conversations totales</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>{total_messages}</h3>
+                        <p>Messages totaux</p>
+                    </div>
+                    <div class="stat-box">
+                        <h3>{total_messages // 2 if total_messages > 0 else 0}</h3>
+                        <p>Questions clients</p>
+                    </div>
+                </div>
+                
+                <h2>📊 Conversations récentes</h2>
+                <table>
+                    <tr>
+                        <th>Session ID</th>
+                        <th>Début</th>
+                        <th>Dernière activité</th>
+                        <th>Page</th>
+                        <th>Messages</th>
+                    </tr>
+        """
+        
+        for conv in recent_conversations:
+            message_count = Message.query.filter_by(conversation_id=conv.id).count()
+            page_url = conv.page_url or "Non spécifiée"
+            if page_url and len(page_url) > 50:
+                page_url = page_url[:50] + "..."
+                
+            html += f"""
+                    <tr>
+                        <td>{conv.session_id[:12]}...</td>
+                        <td>{conv.started_at.strftime('%d/%m/%Y %H:%M')}</td>
+                        <td>{conv.last_activity_at.strftime('%d/%m/%Y %H:%M')}</td>
+                        <td class="truncate">{page_url}</td>
+                        <td>{message_count}</td>
+                    </tr>
+            """
+        
+        html += """
+                </table>
+                
+                <h2>💬 Messages récents</h2>
+        """
+        
+        for msg in recent_messages:
+            role_class = msg.role
+            role_emoji = "👤" if msg.role == "user" else "🌸"
+            role_text = "Client" if msg.role == "user" else "Lucie"
+            
+            content = msg.content
+            if len(content) > 200:
+                content = content[:200] + "..."
+            
+            html += f"""
+                <div class="message {role_class}">
+                    <strong>{role_emoji} {role_text}</strong>
+                    <span class="timestamp">({msg.created_at.strftime('%d/%m/%Y %H:%M')})</span>
+                    <p>{content}</p>
+                </div>
+            """
+        
+        html += """
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+        
+    except Exception as e:
+        return f"<h1>Erreur</h1><p>{str(e)}</p>"
+
+@app.route("/admin/conversation/<session_id>")
+def view_conversation(session_id):
+    """Voir une conversation complète"""
+    try:
+        conv = Conversation.query.filter_by(session_id=session_id).first()
+        if not conv:
+            return "<h1>Conversation non trouvée</h1>"
+            
+        messages = (Message.query
+                   .filter_by(conversation_id=conv.id)
+                   .order_by(Message.created_at.asc())
+                   .all())
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Conversation {session_id}</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }}
+                .message {{ margin: 15px 0; padding: 15px; border-radius: 8px; }}
+                .user {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
+                .assistant {{ background: #f1f8e9; border-left: 4px solid #4caf50; }}
+                .timestamp {{ color: #666; font-size: 12px; margin-bottom: 5px; }}
+                .back {{ color: #007bff; text-decoration: none; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <a href="/admin" class="back">← Retour au dashboard</a>
+                <h1>💬 Conversation {session_id[:12]}...</h1>
+                <p><strong>Débutée :</strong> {conv.started_at.strftime('%d/%m/%Y à %H:%M')}</p>
+                <p><strong>Dernière activité :</strong> {conv.last_activity_at.strftime('%d/%m/%Y à %H:%M')}</p>
+                {f'<p><strong>Page :</strong> {conv.page_url}</p>' if conv.page_url else ''}
+                
+                <hr>
+        """
+        
+        for msg in messages:
+            role_emoji = "👤" if msg.role == "user" else "🌸"
+            role_text = "Client" if msg.role == "user" else "Lucie"
+            
+            html += f"""
+                <div class="message {msg.role}">
+                    <div class="timestamp">{role_emoji} {role_text} - {msg.created_at.strftime('%d/%m/%Y à %H:%M:%S')}</div>
+                    <p>{msg.content}</p>
+                </div>
+            """
+        
+        html += """
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html
+        
+    except Exception as e:
+        return f"<h1>Erreur</h1><p>{str(e)}</p>"
+        
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
