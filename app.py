@@ -3,7 +3,10 @@ import os, uuid
 from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from flask import make_response
+from flask import make_response, send_file
+import json
+import csv
+from io import StringIO, BytesIO
 
 # Import de vos modules
 from chat_handler import ChatHandler
@@ -166,8 +169,6 @@ def health():
         "timestamp": datetime.utcnow().isoformat()
     })
 
-# Ajoutez ces routes à la fin de votre app.py (avant if __name__ == "__main__":)
-
 @app.route("/admin")
 def admin_dashboard():
     """Interface d'administration pour consulter les conversations"""
@@ -184,7 +185,6 @@ def admin_dashboard():
         
         # Messages récents
         recent_messages = (Message.query
-                         .join(Conversation)
                          .order_by(Message.created_at.desc())
                          .limit(20)
                          .all())
@@ -202,6 +202,9 @@ def admin_dashboard():
                 h2 {{ color: #666; margin-top: 30px; }}
                 .stats {{ display: flex; gap: 20px; margin: 20px 0; }}
                 .stat-box {{ background: #007bff; color: white; padding: 20px; border-radius: 8px; text-align: center; flex: 1; }}
+                .export-buttons {{ margin: 20px 0; text-align: right; }}
+                .export-btn {{ color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px; display: inline-block; }}
+                .export-btn:hover {{ opacity: 0.8; }}
                 .conversation {{ border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; background: #fafafa; }}
                 .message {{ margin: 10px 0; padding: 10px; border-radius: 5px; }}
                 .user {{ background: #e3f2fd; border-left: 4px solid #2196f3; }}
@@ -217,17 +220,17 @@ def admin_dashboard():
             <div class="container">
                 <h1>🌸 Administration Lucie - Conversations</h1>
 
-<div style="margin: 20px 0; text-align: right;">
-    <a href="/admin/export/json" style="background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
-        📄 Export JSON
-    </a>
-    <a href="/admin/export/csv" style="background: #17a2b8; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
-        📊 Export CSV
-    </a>
-    <a href="/admin/export/excel" style="background: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin: 0 5px;">
-        📈 Export Excel
-    </a>
-</div>
+                <div class="export-buttons">
+                    <a href="/admin/export/json" class="export-btn" style="background: #28a745;">
+                        📄 Export JSON
+                    </a>
+                    <a href="/admin/export/csv" class="export-btn" style="background: #17a2b8;">
+                        📊 Export CSV
+                    </a>
+                    <a href="/admin/export/excel" class="export-btn" style="background: #007bff;">
+                        📈 Export Excel
+                    </a>
+                </div>
                 
                 <div class="stats">
                     <div class="stat-box">
@@ -263,7 +266,7 @@ def admin_dashboard():
                 
             html += f"""
                     <tr>
-                        <td>{conv.session_id[:12]}...</td>
+                        <td><a href="/admin/conversation/{conv.session_id}" style="color: #007bff; text-decoration: none;">{conv.session_id[:12]}...</a></td>
                         <td>{conv.started_at.strftime('%d/%m/%Y %H:%M')}</td>
                         <td>{conv.last_activity_at.strftime('%d/%m/%Y %H:%M')}</td>
                         <td class="truncate">{page_url}</td>
@@ -278,6 +281,8 @@ def admin_dashboard():
         """
         
         for msg in recent_messages:
+            # Récupérer la conversation pour ce message
+            conv = Conversation.query.get(msg.conversation_id)
             role_class = msg.role
             role_emoji = "👤" if msg.role == "user" else "🌸"
             role_text = "Client" if msg.role == "user" else "Lucie"
@@ -286,10 +291,12 @@ def admin_dashboard():
             if len(content) > 200:
                 content = content[:200] + "..."
             
+            page_info = f" - {conv.page_url}" if conv and conv.page_url else ""
+            
             html += f"""
                 <div class="message {role_class}">
                     <strong>{role_emoji} {role_text}</strong>
-                    <span class="timestamp">({msg.created_at.strftime('%d/%m/%Y %H:%M')})</span>
+                    <span class="timestamp">({msg.created_at.strftime('%d/%m/%Y %H:%M')}{page_info})</span>
                     <p>{content}</p>
                 </div>
             """
@@ -366,13 +373,6 @@ def view_conversation(session_id):
     except Exception as e:
         return f"<h1>Erreur</h1><p>{str(e)}</p>"
 
-# Ajoutez ces routes à votre app.py (après les autres routes /admin)
-
-from flask import send_file
-import json
-import csv
-from io import StringIO, BytesIO
-
 @app.route("/admin/export/json")
 def export_json():
     """Export des conversations au format JSON"""
@@ -388,7 +388,6 @@ def export_json():
                 "started_at": conv.started_at.isoformat(),
                 "last_activity_at": conv.last_activity_at.isoformat(),
                 "page_url": conv.page_url,
-                "page_title": getattr(conv, 'page_title', None),
                 "user_agent": conv.user_agent,
                 "locale": conv.locale,
                 "ip": conv.ip,
@@ -419,16 +418,14 @@ def export_json():
         )
         
     except Exception as e:
-        return f"<h1>Erreur d'export</h1><p>{str(e)}</p>"
+        return f"<h1>Erreur d'export JSON</h1><p>{str(e)}</p>"
 
 @app.route("/admin/export/csv")
 def export_csv():
     """Export des conversations au format CSV"""
     try:
-        messages = (Message.query
-                   .join(Conversation)
-                   .order_by(Message.created_at.asc())
-                   .all())
+        # Récupérer tous les messages (sans jointure problématique)
+        messages = Message.query.order_by(Message.created_at.asc()).all()
         
         output = StringIO()
         writer = csv.writer(output)
@@ -440,23 +437,23 @@ def export_csv():
             'Role',
             'Message',
             'Page URL',
-            'Page Title',
             'Locale',
             'IP'
         ])
         
         # Données
         for msg in messages:
-            conv = msg.conversation
+            # Récupérer la conversation associée
+            conv = Conversation.query.get(msg.conversation_id)
+            
             writer.writerow([
                 msg.created_at.strftime('%d/%m/%Y %H:%M:%S'),
-                conv.session_id,
+                conv.session_id if conv else 'Inconnu',
                 'Client' if msg.role == 'user' else 'Lucie',
                 msg.content,
-                conv.page_url or '',
-                getattr(conv, 'page_title', '') or '',
-                conv.locale or '',
-                conv.ip or ''
+                conv.page_url if conv else '',
+                conv.locale if conv else '',
+                conv.ip if conv else ''
             ])
         
         # Créer BytesIO à partir du StringIO
@@ -477,7 +474,7 @@ def export_csv():
 
 @app.route("/admin/export/excel")
 def export_excel():
-    """Export des conversations au format Excel - version simplifiée"""
+    """Export des conversations au format Excel"""
     try:
         import pandas as pd
         
@@ -542,7 +539,3 @@ def export_excel():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
-
-
-
-
