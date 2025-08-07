@@ -477,30 +477,28 @@ def export_csv():
 
 @app.route("/admin/export/excel")
 def export_excel():
-    """Export des conversations au format Excel (nécessite pandas)"""
+    """Export des conversations au format Excel - version simplifiée"""
     try:
         import pandas as pd
         
-        # Récupérer les données
-        messages = (Message.query
-                   .join(Conversation)
-                   .order_by(Message.created_at.asc())
-                   .all())
+        # Récupérer tous les messages
+        messages = Message.query.order_by(Message.created_at.asc()).all()
         
         # Préparer les données pour pandas
         data = []
         for msg in messages:
-            conv = msg.conversation
+            # Récupérer la conversation associée
+            conv = Conversation.query.get(msg.conversation_id)
+            
             data.append({
                 'Date/Heure': msg.created_at.strftime('%d/%m/%Y %H:%M:%S'),
-                'Session ID': conv.session_id,
+                'Session ID': conv.session_id if conv else 'Inconnu',
                 'Role': 'Client' if msg.role == 'user' else 'Lucie',
                 'Message': msg.content,
-                'Page URL': conv.page_url or '',
-                'Page Title': getattr(conv, 'page_title', '') or '',
-                'Locale': conv.locale or '',
-                'IP': conv.ip or '',
-                'Durée session (min)': round((conv.last_activity_at - conv.started_at).total_seconds() / 60, 1)
+                'Page URL': conv.page_url if conv else '',
+                'Locale': conv.locale if conv else '',
+                'IP': conv.ip if conv else '',
+                'Durée session (min)': round((conv.last_activity_at - conv.started_at).total_seconds() / 60, 1) if conv else 0
             })
         
         # Créer le DataFrame
@@ -516,14 +514,12 @@ def export_excel():
                 'Métrique': [
                     'Nombre total de conversations',
                     'Nombre total de messages',
-                    'Nombre de questions clients',
-                    'Durée moyenne des sessions (min)'
+                    'Nombre de questions clients'
                 ],
                 'Valeur': [
                     Conversation.query.count(),
                     Message.query.count(),
-                    Message.query.filter_by(role='user').count(),
-                    round(df.groupby('Session ID')['Durée session (min)'].first().mean(), 1) if len(df) > 0 else 0
+                    Message.query.filter_by(role='user').count()
                 ]
             }
             stats_df = pd.DataFrame(stats_data)
@@ -539,13 +535,14 @@ def export_excel():
         )
         
     except ImportError:
-        return "<h1>Erreur</h1><p>pandas et openpyxl sont requis pour l'export Excel</p>"
+        return "<h1>Erreur</h1><p>Pour utiliser l'export Excel, ajoutez 'openpyxl' à votre requirements.txt</p>"
     except Exception as e:
         return f"<h1>Erreur d'export Excel</h1><p>{str(e)}</p>"
         
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
 
 
