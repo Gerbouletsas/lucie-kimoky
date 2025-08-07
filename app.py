@@ -4,15 +4,15 @@ from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask import make_response
-import openai
+
+# Import de vos modules
+from chat_handler import ChatHandler
+from vector_store import VectorStore
 
 app = Flask(__name__)
 
-# Configuration CORS
+# CORS - autoriser votre site
 CORS(app, resources={r"/chat": {"origins": ["https://kimoky.com", "https://www.kimoky.com"]}})
-
-# Configuration OpenAI
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Configuration base de données
 db_uri = os.getenv("DATABASE_URL", "sqlite:///kimoky_chat.db")
@@ -26,7 +26,7 @@ db = SQLAlchemy(app)
 
 # --- Modèles de base de données ---
 class Conversation(db.Model):
-    __tablename__ = "conversations"  # Correction: double underscore
+    __tablename__ = "conversations"
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.String(64), index=True, nullable=False)
     started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -37,19 +37,37 @@ class Conversation(db.Model):
     ip = db.Column(db.String(64))
 
 class Message(db.Model):
-    __tablename__ = "messages"  # Correction: double underscore
+    __tablename__ = "messages"
     id = db.Column(db.Integer, primary_key=True)
     conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), index=True, nullable=False)
-    role = db.Column(db.String(16), nullable=False)
+    role = db.Column(db.String(16), nullable=False)   # "user" | "assistant"
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-# Créer les tables
+# Création des tables
 with app.app_context():
     db.create_all()
 
 # Configuration
 IDLE_TIMEOUT = timedelta(minutes=30)
+
+# Initialisation du système Lucie
+try:
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise ValueError("OPENAI_API_KEY non trouvée dans les variables d'environnement")
+    
+    # Initialisation du vector store (avec la clé API)
+    vector_store = VectorStore(openai_api_key)
+    
+    # Initialisation du chat handler
+    lucie = ChatHandler(openai_api_key, vector_store)
+    
+    print("✅ Système Lucie initialisé avec succès")
+    
+except Exception as e:
+    print(f"❌ Erreur lors de l'initialisation de Lucie: {e}")
+    lucie = None
 
 def get_or_create_conversation(payload):
     """Récupère ou crée une conversation"""
@@ -75,60 +93,36 @@ def get_or_create_conversation(payload):
     db.session.commit()
     return conv, sid
 
-def get_ai_response(message):
-    """Obtient une réponse de l'IA"""
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {
-                    "role": "system", 
-                    "content": """Tu es Lucie, l'assistante virtuelle de Kimoky, une boutique de kimonos japonais élégants.
-
-Ton rôle:
-- Aide les clients avec leurs questions sur les kimonos
-- Donne des conseils de style et de taille
-- Explique les différents types de kimonos (yukata, furisode, etc.)
-- Reste polie, chaleureuse et professionnelle
-- Réponds en français
-- Si tu ne sais pas, oriente vers le service client
-
-Garde tes réponses concises mais utiles."""
-                },
-                {"role": "user", "content": message}
-            ],
-            max_tokens=200,
-            temperature=0.7
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Désolée, je rencontre une difficulté technique. Pouvez-vous réessayer ? (Erreur: {str(e)})"
-
 @app.route("/")
 def home():
-    return "🌸 Assistant Lucie - Kimoky est en ligne !"
+    status = "✅ En ligne" if lucie else "❌ Erreur d'initialisation"
+    return f"🌸 Assistant Lucie - Kimoky {status}"
 
 @app.route("/chat", methods=["POST"])
 def chat():
     """Endpoint principal du chat"""
+    if not lucie:
+        return jsonify({"response": "Le système Lucie n'est pas disponible actuellement. Veuillez nous excuser."}), 503
+    
     try:
-        # Vérification du contenu
+        # Vérification du format JSON
         if not request.is_json:
-            return jsonify({"response": "Format JSON requis."}), 400
+            return jsonify({"response": "Format de requête incorrect."}), 400
         
         data = request.get_json()
         message = data.get("message", "").strip()
         
         if not message:
-            return jsonify({"response": "Votre message semble vide. Pouvez-vous reformuler votre question ?"}), 400
+            return jsonify({"response": "Votre message semble vide. Comment puis-je vous aider ? 🌸"}), 400
         
         # Gestion de la conversation
         conversation, session_id = get_or_create_conversation(data)
         
-        # Obtenir la réponse de l'IA
-        response = get_ai_response(message)
+        # Obtenir la réponse de Lucie (votre système original)
+        is_mobile = data.get("is_mobile", False)
+        response = lucie.get_response(message, is_mobile=is_mobile)
         
-        # Sauvegarder les messages en base
+        # Sauvegarder les messages en base de données
         user_msg = Message(
             conversation_id=conversation.id, 
             role="user", 
@@ -159,13 +153,18 @@ def chat():
     except Exception as e:
         print(f"Erreur dans /chat: {e}")
         return jsonify({
-            "response": "Je rencontre une difficulté technique. Pouvez-vous réessayer dans quelques instants ?"
+            "response": "Je rencontre une difficulté technique. Pouvez-vous réessayer dans un moment ? 💌"
         }), 500
 
 @app.route("/health")
 def health():
     """Endpoint de santé pour Render"""
-    return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()})
+    lucie_status = "ok" if lucie else "error"
+    return jsonify({
+        "status": "healthy", 
+        "lucie": lucie_status,
+        "timestamp": datetime.utcnow().isoformat()
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
