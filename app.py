@@ -353,8 +353,186 @@ def view_conversation(session_id):
         
     except Exception as e:
         return f"<h1>Erreur</h1><p>{str(e)}</p>"
+
+# Ajoutez ces routes à votre app.py (après les autres routes /admin)
+
+from flask import send_file
+import json
+import csv
+from io import StringIO, BytesIO
+
+@app.route("/admin/export/json")
+def export_json():
+    """Export des conversations au format JSON"""
+    try:
+        conversations = Conversation.query.all()
+        data = []
+        
+        for conv in conversations:
+            messages = Message.query.filter_by(conversation_id=conv.id).order_by(Message.created_at.asc()).all()
+            
+            conv_data = {
+                "session_id": conv.session_id,
+                "started_at": conv.started_at.isoformat(),
+                "last_activity_at": conv.last_activity_at.isoformat(),
+                "page_url": conv.page_url,
+                "page_title": getattr(conv, 'page_title', None),
+                "user_agent": conv.user_agent,
+                "locale": conv.locale,
+                "ip": conv.ip,
+                "messages": [
+                    {
+                        "role": msg.role,
+                        "content": msg.content,
+                        "created_at": msg.created_at.isoformat()
+                    }
+                    for msg in messages
+                ]
+            }
+            data.append(conv_data)
+        
+        # Créer le fichier JSON
+        json_data = json.dumps(data, indent=2, ensure_ascii=False)
+        
+        # Créer un objet BytesIO
+        output = BytesIO()
+        output.write(json_data.encode('utf-8'))
+        output.seek(0)
+        
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f'conversations_lucie_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json',
+            mimetype='application/json'
+        )
+        
+    except Exception as e:
+        return f"<h1>Erreur d'export</h1><p>{str(e)}</p>"
+
+@app.route("/admin/export/csv")
+def export_csv():
+    """Export des conversations au format CSV"""
+    try:
+        messages = (Message.query
+                   .join(Conversation)
+                   .order_by(Message.created_at.asc())
+                   .all())
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # En-têtes
+        writer.writerow([
+            'Date/Heure',
+            'Session ID',
+            'Role',
+            'Message',
+            'Page URL',
+            'Page Title',
+            'Locale',
+            'IP'
+        ])
+        
+        # Données
+        for msg in messages:
+            conv = msg.conversation
+            writer.writerow([
+                msg.created_at.strftime('%d/%m/%Y %H:%M:%S'),
+                conv.session_id,
+                'Client' if msg.role == 'user' else 'Lucie',
+                msg.content,
+                conv.page_url or '',
+                getattr(conv, 'page_title', '') or '',
+                conv.locale or '',
+                conv.ip or ''
+            ])
+        
+        # Créer BytesIO à partir du StringIO
+        output.seek(0)
+        mem = BytesIO()
+        mem.write(output.getvalue().encode('utf-8'))
+        mem.seek(0)
+        
+        return send_file(
+            mem,
+            as_attachment=True,
+            download_name=f'conversations_lucie_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mimetype='text/csv'
+        )
+        
+    except Exception as e:
+        return f"<h1>Erreur d'export CSV</h1><p>{str(e)}</p>"
+
+@app.route("/admin/export/excel")
+def export_excel():
+    """Export des conversations au format Excel (nécessite pandas)"""
+    try:
+        import pandas as pd
+        
+        # Récupérer les données
+        messages = (Message.query
+                   .join(Conversation)
+                   .order_by(Message.created_at.asc())
+                   .all())
+        
+        # Préparer les données pour pandas
+        data = []
+        for msg in messages:
+            conv = msg.conversation
+            data.append({
+                'Date/Heure': msg.created_at.strftime('%d/%m/%Y %H:%M:%S'),
+                'Session ID': conv.session_id,
+                'Role': 'Client' if msg.role == 'user' else 'Lucie',
+                'Message': msg.content,
+                'Page URL': conv.page_url or '',
+                'Page Title': getattr(conv, 'page_title', '') or '',
+                'Locale': conv.locale or '',
+                'IP': conv.ip or '',
+                'Durée session (min)': round((conv.last_activity_at - conv.started_at).total_seconds() / 60, 1)
+            })
+        
+        # Créer le DataFrame
+        df = pd.DataFrame(data)
+        
+        # Créer le fichier Excel en mémoire
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Conversations', index=False)
+            
+            # Ajouter une feuille avec les statistiques
+            stats_data = {
+                'Métrique': [
+                    'Nombre total de conversations',
+                    'Nombre total de messages',
+                    'Nombre de questions clients',
+                    'Durée moyenne des sessions (min)'
+                ],
+                'Valeur': [
+                    Conversation.query.count(),
+                    Message.query.count(),
+                    Message.query.filter_by(role='user').count(),
+                    round(df.groupby('Session ID')['Durée session (min)'].first().mean(), 1) if len(df) > 0 else 0
+                ]
+            }
+            stats_df = pd.DataFrame(stats_data)
+            stats_df.to_excel(writer, sheet_name='Statistiques', index=False)
+        
+        output.seek(0)
+        
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=f'conversations_lucie_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except ImportError:
+        return "<h1>Erreur</h1><p>pandas et openpyxl sont requis pour l'export Excel</p>"
+    except Exception as e:
+        return f"<h1>Erreur d'export Excel</h1><p>{str(e)}</p>"
         
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
 
