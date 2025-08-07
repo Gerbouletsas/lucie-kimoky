@@ -1,12 +1,10 @@
 flask
 flask-cors
+flask-sqlalchemy
 openai
 faiss-cpu
-flask_sqlalchemy
 gunicorn
 pandas
 psycopg2-binary
 python-dotenv
-openai
-# faiss-cpu      # décommente si tu utilises FAISS pour ton vector store
-# pandas         # décommente uniquement si tu en as besoin
+numpy
