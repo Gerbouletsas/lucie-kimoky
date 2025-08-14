@@ -61,44 +61,50 @@ Il vous suffit de cliquer dessus pour voir toutes les mesures détaillées ✨""
         
         return None  # Pas de réponse rapide
 
-    def get_response(self, question: str, is_mobile: bool = False) -> str:
-        try:
-            # ← AJOUTEZ CES 3 LIGNES AU DÉBUT
-            quick_response = self._get_quick_size_response(question)
-            if quick_response:
-                return quick_response
-            
-            # Le reste de votre code existant reste identique
-            context_docs = self.vector_store.search(question, top_k=5)
-            context = self._build_context(context_docs)
+  # Version qui intercepte AVANT tout traitement :
 
-            if context.strip().startswith("Aucun document"):
-                return "Je n'ai pas trouvé cette information dans notre base. Vous pouvez consulter notre page FAQ ou nous écrire à boutique@kimoky.com 💌"
+def get_response(self, question: str, is_mobile: bool = False) -> str:
+    try:
+        # INTERCEPTION IMMÉDIATE pour les tailles
+        question_lower = question.lower()
+        
+        # Si c'est une question de taille/longueur, réponse immédiate
+        if any(keyword in question_lower for keyword in [
+            'longueur', 'long', 'taille', 'mesure', 'dimension', 'cm'
+        ]):
+            logger.info(f"Size question intercepted: {question}")
+            return """🌸 Pour connaître les dimensions exactes de ce kimono, consultez notre **guide des tailles** qui se trouve juste en dessous du sélecteur de tailles sur la fiche produit.
 
-            user_prompt = self._create_user_prompt(question, context)
+Cliquez dessus pour voir toutes les mesures détaillées ✨"""
+        
+        # SINON, logique normale
+        context_docs = self.vector_store.search(question, top_k=5)
+        context = self._build_context(context_docs)
 
-            response = self.openai_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=300 if is_mobile else 500
-            )
+        if context.strip().startswith("Aucun document"):
+            return "Je n'ai pas trouvé cette information dans notre base. Vous pouvez consulter notre page FAQ ou nous écrire à boutique@kimoky.com 💌"
 
-            answer = response.choices[0].message.content
+        user_prompt = self._create_user_prompt(question, context)
 
-            # Nettoyage du préfixe [Kimoky] ou similaire au début
-            answer = re.sub(r"^\[[^\]]+\]\s*", "", answer.strip())
+        response = self.openai_client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=self.temperature,
+            max_tokens=300 if is_mobile else 500
+        )
 
-            logger.info(f"Generated response for question: {question[:50]}...")
-            return answer
+        answer = response.choices[0].message.content
+        answer = re.sub(r"^\[[^\]]+\]\s*", "", answer.strip())
 
-        except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            return "Je suis désolée, une erreur s'est produite. N'hésitez pas à nous recontacter ou à consulter notre page d'aide."
+        logger.info(f"Generated response for question: {question[:50]}...")
+        return answer
 
+    except Exception as e:
+        logger.error(f"Error generating response: {e}")
+        return "Je suis désolée, une erreur s'est produite. N'hésitez pas à nous recontacter ou à consulter notre page d'aide."
     def _build_context(self, context_docs: List[Dict[str, Any]]) -> str:
         if not context_docs:
             return "Aucun document de référence trouvé."
@@ -132,3 +138,4 @@ Réponds en **2 à 4 phrases maximum**, avec un ton chaleureux, fluide et profes
             return "produit"
         else:
             return "general"
+
