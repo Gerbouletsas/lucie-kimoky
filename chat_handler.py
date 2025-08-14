@@ -15,7 +15,7 @@ class ChatHandler:
         self.temperature = 0.3
 
         self.system_prompt = """
-Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.com), une boutique spécialisée dans les kimonos modernes, élégants et inspirés de l’esthétique japonaise. Tu accompagnes chaque visiteur avec douceur, précision et élégance.
+Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.com), une boutique spécialisée dans les kimonos modernes, élégants et inspirés de l'esthétique japonaise. Tu accompagnes chaque visiteur avec douceur, précision et élégance.
 
 🎯 Ton rôle :
 1. Guider les clientes et clients dans le choix du kimono idéal selon leur morphologie, le style recherché (chic, nuit, décontracté, plage…), la matière (satin, coton…) ou la saison.
@@ -23,7 +23,7 @@ Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.co
 
 ✨ Ton ton est toujours :
 - poétique, chaleureux, professionnel et fluide
-- fidèle à l’univers raffiné de Kimoky
+- fidèle à l'univers raffiné de Kimoky
 - orienté conseil, inspiration et confiance
 
 📌 Règles :
@@ -33,7 +33,7 @@ Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.co
 - Tu restes toujours polie, rassurante et élégante
 - Tu peux proposer des liens utiles vers https://kimoky.com si cela aide
 
-🖋️ Tu peux utiliser **1 à 2 emojis élégants maximum** (ex : ✨, 🌸, 📦, 💌), uniquement s’ils renforcent la clarté ou l’émotion. Jamais d’emojis trop familiers (😍🔥😂…).
+🖋️ Tu peux utiliser **1 à 2 emojis élégants maximum** (ex : ✨, 🌸, 📦, 💌), uniquement s'ils renforcent la clarté ou l'émotion. Jamais d'emojis trop familiers (😍🔥😂…).
 
 💬 Si une question est floue, reformule-la avec tact. Si la personne semble perdue, guide-la avec douceur.
 
@@ -45,13 +45,35 @@ Tu es **Lucie**, la conseillère digitale de la marque Kimoky (https://kimoky.co
 Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
         """
 
+    # ← AJOUTEZ CETTE NOUVELLE MÉTHODE ICI
+    def _get_quick_size_response(self, question: str) -> str:
+        """Réponse rapide pour les questions de taille/longueur"""
+        question_lower = question.lower()
+        
+        # Questions sur la longueur, taille, mesures
+        if any(word in question_lower for word in [
+            'longueur', 'long', 'taille', 'mesure', 'dimension', 
+            'cm', 'centimètre', 'grand', 'petit', 'sizing'
+        ]):
+            return """🌸 Pour connaître les dimensions exactes de ce kimono, je vous invite à consulter notre **guide des tailles** qui se trouve juste en dessous du sélecteur de tailles sur la fiche produit.
+
+Il vous suffit de cliquer dessus pour voir toutes les mesures détaillées ✨"""
+        
+        return None  # Pas de réponse rapide
+
     def get_response(self, question: str, is_mobile: bool = False) -> str:
         try:
+            # ← AJOUTEZ CES 3 LIGNES AU DÉBUT
+            quick_response = self._get_quick_size_response(question)
+            if quick_response:
+                return quick_response
+            
+            # Le reste de votre code existant reste identique
             context_docs = self.vector_store.search(question, top_k=5)
             context = self._build_context(context_docs)
 
             if context.strip().startswith("Aucun document"):
-                return "Je n’ai pas trouvé cette information dans notre base. Vous pouvez consulter notre page FAQ ou nous écrire à boutique@kimoky.com 💌"
+                return "Je n'ai pas trouvé cette information dans notre base. Vous pouvez consulter notre page FAQ ou nous écrire à boutique@kimoky.com 💌"
 
             user_prompt = self._create_user_prompt(question, context)
 
@@ -75,7 +97,7 @@ Tu es **Lucie**, la voix élégante et bienveillante de Kimoky 🌸
 
         except Exception as e:
             logger.error(f"Error generating response: {e}")
-            return "Je suis désolée, une erreur s’est produite. N’hésitez pas à nous recontacter ou à consulter notre page d’aide."
+            return "Je suis désolée, une erreur s'est produite. N'hésitez pas à nous recontacter ou à consulter notre page d'aide."
 
     def _build_context(self, context_docs: List[Dict[str, Any]]) -> str:
         if not context_docs:
@@ -110,4 +132,3 @@ Réponds en **2 à 4 phrases maximum**, avec un ton chaleureux, fluide et profes
             return "produit"
         else:
             return "general"
-
